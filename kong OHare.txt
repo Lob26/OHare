@@ -1,0 +1,33 @@
+_format_version: "2.1"
+
+services:
+  - host: formula_upstream
+    name: formula_service
+    protocol: http
+    routes:
+      
+      - name: formula
+        paths:
+          - /formula
+        strip_path: false
+
+  - host: supply_upstream
+    name: supply_service
+    protocol: http
+    routes:
+      
+      - name: supply
+        paths:
+          - /supply
+        strip_path: false
+    
+upstreams:
+  - name: supply_upstream
+    targets:
+      - target: 10.128.0.16:8080
+        weight: 100
+
+  - name: formula_upstream
+    targets:
+      - target: 10.128.0.15:8080
+        weight: 100

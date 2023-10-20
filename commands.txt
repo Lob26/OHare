@@ -1,0 +1,226 @@
+                                                               ~ ~  Project ID  ~ ~ 
+
+rasi-ohare
+
+                                                          ~ ~ Firewall Rules Creation ~ ~ 
+
+gcloud compute --project=rasi-ohare firewall-rules create services-apps --direction=INGRESS --priority=1000 --network=default --action=ALLOW --rules=tcp:8080 --source-tags=kong --target-tags=services-firewall
+
+gcloud compute --project=rasi-ohare firewall-rules create kong --direction=INGRESS --priority=1000 --network=default --action=ALLOW --rules=tcp:8000 --source-ranges=0.0.0.0/0 --target-tags=kong
+
+gcloud compute --project=rasi-ohare firewall-rules create kong-admin --direction=INGRESS --priority=1000 --network=default --action=ALLOW --rules=tcp:8001 --source-ranges=0.0.0.0/0 --target-tags=kong
+
+gcloud compute --project=rasi-ohare firewall-rules create app-db --direction=INGRESS --priority=1000 --network=default --action=ALLOW --rules=tcp:5432 --source-tags=services-firewall --target-tags=app-db
+
+                                                            ~ ~ Databases Creation ~ ~ 
+
+Insumos / Supply DB:
+
+gcloud compute instances create supply-db --project=rasi-ohare --zone=us-central1-a --machine-type=e2-micro --network-interface=network-tier=PREMIUM,subnet=default --maintenance-policy=MIGRATE --provisioning-model=STANDARD --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --tags=app-db --create-disk=auto-delete=yes,boot=yes,device-name=supply-db,image=projects/cos-cloud/global/images/cos-101-17162-40-20,mode=rw,size=10,type=projects/rasi-ohare/zones/us-central1-a/diskTypes/pd-standard --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --reservation-affinity=any
+
+    # Inside the SHH of the instance:
+
+docker run --restart=always -d -e POSTGRES_USER=supply_user -e POSTGRES_DB=supply_db -e POSTGRES_PASSWORD=isis2503 -p 5432:5432 --name supply-db postgres
+
+docker ps -a
+
+    # ~ #
+
+Formula medica / formula DB:
+
+gcloud compute instances create formula-db --project=rasi-ohare --zone=us-central1-a --machine-type=e2-micro --network-interface=network-tier=PREMIUM,subnet=default --maintenance-policy=MIGRATE --provisioning-model=STANDARD --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --tags=app-db --create-disk=auto-delete=yes,boot=yes,device-name=formula-db,image=projects/cos-cloud/global/images/cos-101-17162-40-20,mode=rw,size=10,type=projects/rasi-ohare/zones/us-central1-a/diskTypes/pd-standard --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --reservation-affinity=any
+
+    # Inside the SHH of the instance:
+
+>>> docker run --restart=always -d -e POSTGRES_USER=formula_user -e POSTGRES_DB=formula_db -e POSTGRES_PASSWORD=isis2503 -p 5432:5432 --name formula-db postgres
+
+>>> docker ps -a
+
+    # ~ #
+
+                                                         ~ ~ API Gateway Kong Creation ~ ~ 
+
+gcloud compute instances create kong --project=rasi-ohare --zone=us-central1-a --machine-type=e2-micro --network-interface=network-tier=PREMIUM,subnet=default --maintenance-policy=MIGRATE --provisioning-model=STANDARD --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --tags=kong --create-disk=auto-delete=yes,boot=yes,device-name=kong-instance,image=projects/cos-cloud/global/images/cos-101-17162-40-20,mode=rw,size=10,type=projects/rasi-ohare/zones/us-central1-a/diskTypes/pd-standard --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --reservation-affinity=any
+
+    # Inside the SHH of the instance:
+
+>>> sudo apt-get update
+
+>>> sudo apt-get install ca-certificates curl gnupg lsb-release -y
+
+>>> sudo mkdir -m 0755 -p /etc/apt/keyrings
+
+>>> curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+>>> echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+>>> sudo apt-get update
+
+>>> sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+
+>>> docker --version
+
+>>> sudo nano kong.yml
+
+>>> sudo docker network create kong-net
+
+>>> sudo docker run -d --name kong --network=kong-net -v "$(pwd):/kong/declarative/" -e "KONG_DATABASE=off" -e "KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml" -e "KONG_PROXY_ACCESS_LOG=/dev/stdout" -e "KONG_ADMIN_ACCESS_LOG=/dev/stdout" -e "KONG_PROXY_ERROR_LOG=/dev/stderr" -e "KONG_ADMIN_ERROR_LOG=/dev/stderr" -e "KONG_ADMIN_LISTEN=0.0.0.0:8001" -e "KONG_ADMIN_GUI_URL=http://localhost:8002" -p 8000:8000 -p 8001:8001 -p 8002:8002 kong/kong-gateway:2.7.2.0-alpine
+
+>>> sudo docker ps
+
+    # ~ #
+
+Open http://<ip_externa_kong>:8000
+
+http://34.171.79.85:8000
+
+It should show:
+{"message":"no Route matched with those values"}
+
+                                                          ~ ~ Microservices Creation ~ ~ 
+
+Insumos / Supply MS:
+
+gcloud compute instances create supply-ms --project=rasi-ohare --zone=us-central1-a --machine-type=e2-micro --network-interface=network-tier=PREMIUM,subnet=default --maintenance-policy=MIGRATE --provisioning-model=STANDARD --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --tags=services-apps --create-disk=auto-delete=yes,boot=yes,device-name=supply-ms,image=projects/ubuntu-os-cloud/global/images/ubuntu-1804-bionic-v20221018,mode=rw,size=10,type=projects/rasi-ohare/zones/us-central1-a/diskTypes/pd-standard --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --reservation-affinity=any
+
+    # Inside the SHH of the instance:
+
+>>> sudo apt update
+
+>>> sudo apt install python3-pip -y
+
+>>> export LC_ALL=C
+
+>>> git clone https://github.com/KorenJin/OHare.git
+
+>>> pip install --upgrade Django
+(optional) >>> pip3 install --upgrade Django
+
+(In case instalation of psycopg2 fails)
+>>> sudo apt-get install libpq-dev
+>>> sudo apt update
+
+>>> pip install --upgrade psycopg2
+(optional) >>> pip3 install --upgrade psycopg2
+(optional) >>> pip3 install psycopg2
+
+>>> pip install --upgrade psycopg2-binary
+(optional) >>> pip3 install --upgrade psycopg2-binary
+(optional) >>> pip3 install psycopg2-binary
+
+>>> pip install --upgrade requests
+(optional) >>> pip3 install --upgrade requests
+(optional) >>> pip3 install requests
+
+>>> cd OHare/RasiMedicalApp/microservices/supply
+
+>>> sudo nano supply/settings.py
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'supply_db',
+        'USER': 'supply_user',
+        'PASSWORD': 'isis2503',
+        'HOST': 'internal_ip of the db instance',
+        'PORT': '5432'
+    }
+}
+
+ctrl+x -> y -> enter
+
+    # ~ #
+
+Formula medica / formula MS:
+
+gcloud compute instances create formula-ms --project=rasi-ohare --zone=us-central1-a --machine-type=e2-micro --network-interface=network-tier=PREMIUM,subnet=default --maintenance-policy=MIGRATE --provisioning-model=STANDARD --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --tags=services-apps --create-disk=auto-delete=yes,boot=yes,device-name=formula-ms,image=projects/ubuntu-os-cloud/global/images/ubuntu-1804-bionic-v20221018,mode=rw,size=10,type=projects/rasi-ohare/zones/us-central1-a/diskTypes/pd-standard --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --reservation-affinity=any
+
+    # Inside the SHH of the instance:
+
+>>> sudo apt update
+
+>>> sudo apt install python3-pip -y
+(optional) >>> sudo apt install python3-pip
+
+>>> export LC_ALL=C
+
+>>> git clone https://github.com/KorenJin/OHare.git
+
+>>> pip install --upgrade Django
+(optional) >>> pip3 install --upgrade Django
+(optional) >>> pip3 install Django
+(optional) >>> pip install Django
+
+(In case instalation of psycopg2 fails)
+>>> sudo apt-get install libpq-dev
+>>> sudo apt update
+
+>>> pip install --upgrade psycopg2
+(optional) >>> pip3 install --upgrade psycopg2
+(optional) >>> pip3 install psycopg2
+
+>>> pip install --upgrade psycopg2-binary
+(optional) >>> pip3 install --upgrade psycopg2-binary
+(optional) >>> pip3 install psycopg2-binary
+
+>>> pip install --upgrade requests
+(optional) >>> pip3 install --upgrade requests
+(optional) >>> pip3 install requests
+
+>>> cd OHare/RasiMedicalApp/microservices/formula
+
+>>> sudo nano formula/settings.py
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'formula_db',
+        'USER': 'formula_user',
+        'PASSWORD': 'isis2503',
+        'HOST': 'internal_ip of the db instance',
+        'PORT': '5432'
+    }
+}
+
+ctrl+x -> y -> enter
+
+    # ~ #
+
+                                                      ~ ~ Django Project Creation Commands ~ ~ 
+
+"django-admin startproject project_name"
+
+cd RasiMedicalApp/microservices
+
+django-admin startproject supply
+django-admin startproject formula
+
+"python manage.py startapp app_name"
+
+# (When OHare is the root)
+cd RasiMedicalApp/microservices/supply 
+cd RasiMedicalApp/microservices/formula
+
+cd OHare/RasiMedicalApp/microservices/supply 
+cd OHare/RasiMedicalApp/microservices/formula
+
+python manage.py makemigrations
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8080 # For remote hosting
+python manage.py runserver # For local hosting
+
+python3 manage.py makemigrations
+python3 manage.py migrate
+python3 manage.py runserver 0.0.0.0:8080 # For remote hosting
+
+# When a table is not being created
+python manage.py makemigrations <table_name>
+python manage.py migrate <table_name>
+
+python manage.py makemigrations supply
+python manage.py migrate supply
+
+python manage.py makemigrations formula
+python manage.py migrate formula
+
+docker ps -a

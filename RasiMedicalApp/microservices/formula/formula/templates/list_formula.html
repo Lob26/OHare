@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Listado de Fórmulas</title>
+</head>
+<body>
+    <h1>Listado de Fórmulas</h1>
+    <ul id="list_formulas">
+        
+    </ul>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $.ajax({
+                url: '/formulas', 
+                method: 'GET',
+                dataType: 'json',
+                success: function (data) {
+                    
+                    $.each(data, function (index, item) {
+                        $('#list_formulas').append('<li>' + item.dose + ' - ' + item.frequency + ' - ' + item.unity + '</li>');
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+

@@ -1,0 +1,4 @@
+pip install --upgrade Django
+pip install --upgrade psycopg2
+pip install --upgrade psycopg2-binary
+pip install --upgrade requests
